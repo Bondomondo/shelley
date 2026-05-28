@@ -25,21 +25,21 @@ class ShellCore:
     # ── Prompt ──────────────────────────────────────────────────────────────
 
     def build_prompt(self):
-        """Return a plain ANSI prompt string for prompt_toolkit."""
+        """Return a prompt_toolkit ANSI() prompt object."""
+        from prompt_toolkit.formatted_text import ANSI
         user = os.environ.get("USER", "user")
         host = socket.gethostname().split(".")[0]
         path = self._short_path(self.cwd)
         indicator = "✗" if self.last_exit_code != 0 else "›"
-        # ANSI colors — wrapped in \001/\002 so prompt_toolkit measures width correctly
-        TEAL   = "\001\033[38;2;93;202;165m\002"
-        PURPLE = "\001\033[38;2;175;169;236m\002"
-        AMBER  = "\001\033[38;2;250;199;117m\002"
-        GRAY   = "\001\033[38;2;136;135;128m\002"
-        RED    = "\001\033[38;2;226;75;74m\002"
-        BOLD   = "\001\033[1m\002"
-        R      = "\001\033[0m\002"
+        TEAL   = "\033[38;2;93;202;165m"
+        PURPLE = "\033[38;2;175;169;236m"
+        AMBER  = "\033[38;2;250;199;117m"
+        GRAY   = "\033[38;2;136;135;128m"
+        RED    = "\033[38;2;226;75;74m"
+        BOLD   = "\033[1m"
+        R      = "\033[0m"
         ind_color = RED if self.last_exit_code != 0 else TEAL
-        return (
+        raw = (
             f"{TEAL}{BOLD}{user}{R}"
             f"{GRAY}@{R}"
             f"{PURPLE}{host}{R}"
@@ -47,6 +47,7 @@ class ShellCore:
             f"{AMBER}{BOLD}{path}{R}"
             f" {ind_color}{indicator}{R} "
         )
+        return ANSI(raw)
 
     def _short_path(self, path: Path) -> str:
         try:
@@ -58,16 +59,9 @@ class ShellCore:
     # ── Execution ────────────────────────────────────────────────────────────
 
     def run_command(self, command: str) -> dict:
-        """
-        Execute a shell command. Returns dict with stdout, stderr, exit_code.
-        Handles 'cd' specially to persist directory changes.
-        """
         command = command.strip()
-
-        # Handle cd internally so cwd persists
         if command.startswith("cd"):
             return self._handle_cd(command)
-
         try:
             result = subprocess.run(
                 command,
@@ -87,20 +81,10 @@ class ShellCore:
             }
         except subprocess.TimeoutExpired:
             self.last_exit_code = 1
-            return {
-                "stdout": "",
-                "stderr": f"Command timed out after 30 seconds: {command}",
-                "exit_code": 1,
-                "command": command,
-            }
+            return {"stdout": "", "stderr": f"Timed out: {command}", "exit_code": 1, "command": command}
         except Exception as e:
             self.last_exit_code = 1
-            return {
-                "stdout": "",
-                "stderr": str(e),
-                "exit_code": 1,
-                "command": command,
-            }
+            return {"stdout": "", "stderr": str(e), "exit_code": 1, "command": command}
 
     def _handle_cd(self, command: str) -> dict:
         parts = command.split(None, 1)
@@ -122,7 +106,6 @@ class ShellCore:
     # ── System snapshot ──────────────────────────────────────────────────────
 
     def get_system_snapshot(self) -> dict:
-        """Gather live system info to feed into the AI's context."""
         snap = {
             "cwd": str(self.cwd),
             "user": os.environ.get("USER", "unknown"),
@@ -133,7 +116,6 @@ class ShellCore:
             "home": str(Path.home()),
             "timestamp": datetime.now().isoformat(),
         }
-
         if psutil:
             snap["cpu_percent"] = psutil.cpu_percent(interval=0.1)
             mem = psutil.virtual_memory()
@@ -143,21 +125,16 @@ class ShellCore:
             disk = psutil.disk_usage(str(self.cwd))
             snap["disk_free_gb"] = round(disk.free / 1e9, 1)
             snap["disk_total_gb"] = round(disk.total / 1e9, 1)
-
-        # List files in cwd (up to 30)
         try:
             entries = sorted(self.cwd.iterdir(), key=lambda p: (p.is_file(), p.name))
             snap["cwd_contents"] = [
-                ("d " if e.is_dir() else "f ") + e.name
-                for e in entries[:30]
+                ("d " if e.is_dir() else "f ") + e.name for e in entries[:30]
             ]
         except Exception:
             snap["cwd_contents"] = []
-
         return snap
 
     def get_context_string(self) -> str:
-        """Compact string representation of system state for the AI system prompt."""
         snap = self.get_system_snapshot()
         lines = [
             f"User: {snap['user']}@{snap['hostname']}",
@@ -166,9 +143,7 @@ class ShellCore:
             f"CWD contents: {', '.join(snap['cwd_contents'][:15]) or '(empty)'}",
         ]
         if "mem_percent" in snap:
-            lines.append(
-                f"Memory: {snap['mem_used_gb']}GB / {snap['mem_total_gb']}GB ({snap['mem_percent']}%)"
-            )
+            lines.append(f"Memory: {snap['mem_used_gb']}GB / {snap['mem_total_gb']}GB ({snap['mem_percent']}%)")
         if "cpu_percent" in snap:
             lines.append(f"CPU: {snap['cpu_percent']}%")
         if "disk_free_gb" in snap:
