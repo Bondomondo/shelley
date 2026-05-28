@@ -25,19 +25,27 @@ class ShellCore:
     # ── Prompt ──────────────────────────────────────────────────────────────
 
     def build_prompt(self):
-        """Return a prompt_toolkit HTML prompt string."""
+        """Return a plain ANSI prompt string for prompt_toolkit."""
         user = os.environ.get("USER", "user")
         host = socket.gethostname().split(".")[0]
         path = self._short_path(self.cwd)
         indicator = "✗" if self.last_exit_code != 0 else "›"
-        color = "#E24B4A" if self.last_exit_code != 0 else "#5DCAA5"
+        # ANSI colors — wrapped in \001/\002 so prompt_toolkit measures width correctly
+        TEAL   = "\001\033[38;2;93;202;165m\002"
+        PURPLE = "\001\033[38;2;175;169;236m\002"
+        AMBER  = "\001\033[38;2;250;199;117m\002"
+        GRAY   = "\001\033[38;2;136;135;128m\002"
+        RED    = "\001\033[38;2;226;75;74m\002"
+        BOLD   = "\001\033[1m\002"
+        R      = "\001\033[0m\002"
+        ind_color = RED if self.last_exit_code != 0 else TEAL
         return (
-            f'<prompt.user>{user}</prompt.user>'
-            f'<prompt.at>@</prompt.at>'
-            f'<prompt.host>{host}</prompt.host>'
-            f'<prompt.sep>:</prompt.sep>'
-            f'<prompt.path>{path}</prompt.path>'
-            f' <style fg="{color}">{indicator}</style> '
+            f"{TEAL}{BOLD}{user}{R}"
+            f"{GRAY}@{R}"
+            f"{PURPLE}{host}{R}"
+            f"{GRAY}:{R}"
+            f"{AMBER}{BOLD}{path}{R}"
+            f" {ind_color}{indicator}{R} "
         )
 
     def _short_path(self, path: Path) -> str:
