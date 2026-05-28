@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIShell Dashboard</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com 'self'; script-src 'self'; connect-src ws://localhost:7700" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" />
+  <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- LEFT SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-mark">◆</span>
+      <span class="logo-text">AIShell</span>
+    </div>
+
+    <section class="sidebar-section">
+      <div class="section-label">System</div>
+      <div id="gauge-cpu"  class="gauge">
+        <div class="gauge-header"><span class="gauge-name">CPU</span><span class="gauge-pct">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" style="width:0%"></div></div>
+      </div>
+      <div id="gauge-mem"  class="gauge">
+        <div class="gauge-header"><span class="gauge-name">Memory</span><span class="gauge-pct">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" style="width:0%"></div></div>
+      </div>
+      <div id="gauge-disk" class="gauge">
+        <div class="gauge-header"><span class="gauge-name">Disk</span><span class="gauge-pct">—</span></div>
+        <div class="gauge-track"><div class="gauge-fill" style="width:0%"></div></div>
+      </div>
+      <div id="net-stats"  class="net-row">↓ — KB/s &nbsp; ↑ — KB/s</div>
+      <div id="uptime-row" class="info-row">Up: —</div>
+    </section>
+
+    <section class="sidebar-section">
+      <div class="section-label">Agents</div>
+      <div id="agent-list"></div>
+    </section>
+  </aside>
+
+  <!-- CENTER PANEL -->
+  <main id="center-panel">
+    <div id="terminal-container"></div>
+    <div id="agent-output-container" style="display:none">
+      <div id="agent-output-header">
+        <span id="agent-output-title"></span>
+        <button id="agent-back-btn">← Back to terminal</button>
+      </div>
+      <pre id="agent-output-pre"></pre>
+    </div>
+
+    <div id="prompt-bar">
+      <span class="prompt-icon" id="prompt-icon">◆</span>
+      <input id="prompt-input"
+             type="text"
+             placeholder="Ask anything or run a command…"
+             autocomplete="off"
+             spellcheck="false" />
+      <kbd class="prompt-hint">↵</kbd>
+    </div>
+  </main>
+
+  <!-- RIGHT AI PANEL -->
+  <aside id="ai-panel">
+    <div class="panel-header">
+      <span class="section-label">AI Context</span>
+      <button id="collapse-ai-panel" aria-label="Collapse">‹</button>
+    </div>
+    <div id="context-feed">
+      <div id="ws-waiting" class="ws-waiting">Waiting for shell…</div>
+    </div>
+  </aside>
+
+  <!-- Scripts: xterm globals first, then app modules -->
+  <script src="../node_modules/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="app.js"></script>
+  <script src="terminal.js"></script>
+  <script src="sysmon.js"></script>
+  <script src="agent-panel.js"></script>
+  <script src="ai-context.js"></script>
+</body>
+</html>

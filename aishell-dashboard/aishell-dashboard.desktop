@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AIShell Dashboard
+Comment=AIShell terminal dashboard
+Exec=/usr/bin/electron /home/user/shelley/aishell-dashboard
+Icon=/home/user/shelley/aishell-dashboard/assets/icon.png
+Terminal=false
+Categories=System;TerminalEmulator;
+X-GNOME-Autostart-enabled=true
