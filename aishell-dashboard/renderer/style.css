@@ -82,6 +82,7 @@ body { display: flex; flex-direction: row; }
 #ai-panel.collapsed {
   width: 0;
   border-left-width: 0;
+  overflow: hidden;
 }
 
 /* ── Terminal container ──────────────────────────────────────────────────── */

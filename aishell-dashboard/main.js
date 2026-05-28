@@ -219,12 +219,13 @@ function registerShortcuts() {
   if (!r.call(globalShortcut, 'Ctrl+Alt+Q', () => app.quit())) {
     console.warn('Ctrl+Alt+Q shortcut could not be registered')
   }
-  globalShortcut.register('Ctrl+Alt+T', () => {
+  if (!globalShortcut.register('Ctrl+Alt+T', () => {
     if (win && !win.isDestroyed()) win.webContents.send('focus-terminal')
-  })
-  globalShortcut.register('Ctrl+Alt+A', () => {
+  })) console.warn('Ctrl+Alt+T shortcut could not be registered')
+
+  if (!globalShortcut.register('Ctrl+Alt+A', () => {
     if (win && !win.isDestroyed()) win.webContents.send('toggle-ai-panel')
-  })
+  })) console.warn('Ctrl+Alt+A shortcut could not be registered')
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
@@ -245,14 +246,16 @@ app.on('will-quit', e => {
   globalShortcut.unregisterAll()
   if (statsInterval) clearInterval(statsInterval)
   if (ptyProcess) {
+    const proc = ptyProcess
+    ptyProcess = null // prevent re-entry on second will-quit
     let cleaned = false
     const finish = () => {
       if (cleaned) return
       cleaned = true
       app.exit(0)
     }
-    ptyProcess.onExit(finish)
-    try { ptyProcess.kill('SIGTERM') } catch (_) {}
+    proc.onExit(finish)
+    try { proc.kill('SIGTERM') } catch (_) {}
     setTimeout(finish, 2000) // force exit after 2 s
   } else {
     app.exit(0)
