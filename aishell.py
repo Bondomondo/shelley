@@ -20,8 +20,7 @@ try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-    from prompt_toolkit.styles import Style
-    from prompt_toolkit.formatted_text import HTML
+
     import psutil
 except ImportError as e:
     print(f"\n[aishell] Missing dependency: {e}")
@@ -50,13 +49,6 @@ def main():
     session = PromptSession(
         history=FileHistory(str(history_file)),
         auto_suggest=AutoSuggestFromHistory(),
-        style=Style.from_dict({
-            "prompt.user": "#5DCAA5 bold",
-            "prompt.at":   "#888780",
-            "prompt.host": "#AFA9EC",
-            "prompt.path": "#FAC775 bold",
-            "prompt.sep":  "#5F5E5A",
-        }),
     )
 
     while True:
