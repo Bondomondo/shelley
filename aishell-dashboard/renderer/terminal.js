@@ -27,7 +27,7 @@ const term = new Terminal({
   allowTransparency: true,
 })
 
-const fitAddon = new FitAddon()
+const fitAddon = new FitAddon.FitAddon()
 term.loadAddon(fitAddon)
 
 const container = document.getElementById('terminal-container')
