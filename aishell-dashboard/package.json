@@ -4,8 +4,8 @@
   "description": "Electron dashboard for AIShell",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --no-sandbox --dev",
     "rebuild": "electron-rebuild -f -w node-pty"
   },
   "dependencies": {
