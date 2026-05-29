@@ -4,9 +4,24 @@ ai_brain.py — the AI layer: intent parsing, tool use, conversation memory
 
 import json
 import re
+import sys
 from typing import Optional
 
 import anthropic
+
+# Commands that need user permission before the AI runs them
+_NEEDS_PERMISSION = re.compile(
+    r'\b(sudo\s+apt(-get)?\s+install'
+    r'|sudo\s+snap\s+install'
+    r'|sudo\s+pip\d*\s+install'
+    r'|sudo\s+dpkg\s+-i'
+    r'|apt(-get)?\s+install'
+    r'|pip\d*\s+install\b'
+    r'|npm\s+install\s+-g'
+    r'|cargo\s+install'
+    r'|gem\s+install)\b',
+    re.IGNORECASE,
+)
 
 
 SYSTEM_PROMPT = """You are AIShell, an AI-native interactive shell running on Ubuntu Linux.
@@ -152,6 +167,29 @@ class AIBrain:
                 cmd = tc.input.get("command", "")
                 explanation = tc.input.get("explanation", "")
 
+                # Permission gate for installs / sudo
+                if _NEEDS_PERMISSION.search(cmd):
+                    renderer.print_command(cmd, explanation)
+                    try:
+                        answer = input(
+                            f"\n  \033[38;2;250;199;117m⚠ AI wants to run the above command.\033[0m"
+                            f"  Allow? [y/N] "
+                        ).strip().lower()
+                    except EOFError:
+                        answer = "n"
+                    if answer not in ("y", "yes"):
+                        renderer.print_info("Command skipped.")
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tc.id,
+                            "content": json.dumps({
+                                "stdout": "",
+                                "stderr": "User denied permission to run this command.",
+                                "exit_code": 1,
+                            }),
+                        })
+                        continue
+
                 self._emit({"type": "tool_start", "command": cmd, "explanation": explanation})
                 renderer.print_command(cmd, explanation)
                 result = self.core.run_command(cmd)
@@ -186,6 +224,35 @@ class AIBrain:
                 break
         else:
             renderer.print_error("Reached max tool call rounds.")
+
+    def suggest_fix(self, command: str, result: dict, renderer):
+        """Called after a direct command fails — gives a brief fix suggestion."""
+        stderr = result.get("stderr", "").strip()
+        exit_code = result.get("exit_code", 1)
+        context = (
+            f"The user ran this shell command and it failed.\n"
+            f"Command: {command}\n"
+            f"Exit code: {exit_code}\n"
+            f"Stderr: {stderr[:600]}"
+        )
+        self._emit({"type": "ai_thinking", "input": f"error in: {command}"})
+        try:
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=150,
+                system=(
+                    "You are a shell assistant. A command just failed. "
+                    "Give a concise 1-2 sentence suggestion to fix it. "
+                    "No preamble, no markdown."
+                ),
+                messages=[{"role": "user", "content": context}],
+            )
+            text = response.content[0].text.strip() if response.content else ""
+            if text:
+                renderer.print_ai_response(text)
+                self._emit({"type": "ai_response", "text": text})
+        except Exception:
+            pass
 
     def _trim_history(self):
         """Keep conversation from growing unbounded."""
