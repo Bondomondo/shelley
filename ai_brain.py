@@ -83,10 +83,11 @@ TOOLS = [
 
 
 class AIBrain:
-    def __init__(self, api_key: str, shell_core, broadcaster=None):
+    def __init__(self, api_key: str, shell_core, broadcaster=None, mcp_manager=None):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.core = shell_core
         self.broadcaster = broadcaster
+        self.mcp = mcp_manager
         self.conversation: list[dict] = []
         self.max_history = 20  # keep last N message pairs
 
@@ -127,12 +128,13 @@ class AIBrain:
         # Agentic loop: keep going until no more tool calls
         max_rounds = 8
         for round_num in range(max_rounds):
+            all_tools = TOOLS + (self.mcp.get_all_tools() if self.mcp else [])
             try:
                 response = self.client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=2048,
                     system=system,
-                    tools=TOOLS,
+                    tools=all_tools,
                     messages=self.conversation,
                 )
             except anthropic.APIError as e:
@@ -193,6 +195,22 @@ class AIBrain:
                         })
                         continue
 
+                # ── MCP tool call ──────────────────────────────────────
+                from mcp_manager import decode_tool
+                if tc.name.startswith("mcp__") and self.mcp and decode_tool(tc.name):
+                    self._emit({"type": "tool_start", "command": tc.name, "explanation": explanation})
+                    renderer.print_command(tc.name, explanation)
+                    mcp_result = self.mcp.call_tool(tc.name, tc.input)
+                    renderer.print_direct_output({"stdout": mcp_result, "stderr": "", "exit_code": 0})
+                    self._emit({"type": "tool_result", "command": tc.name, "exit_code": 0, "stdout": mcp_result[:4000]})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tc.id,
+                        "content": mcp_result[:4000],
+                    })
+                    continue
+
+                # ── Shell tool call ────────────────────────────────────
                 self._emit({"type": "tool_start", "command": cmd, "explanation": explanation})
                 renderer.print_command(cmd, explanation)
                 result = self.core.run_command(cmd)

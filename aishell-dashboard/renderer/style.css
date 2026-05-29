@@ -330,6 +330,33 @@ body { display: flex; flex-direction: row; }
   text-overflow: ellipsis;
 }
 
+/* ── MCP server list ─────────────────────────────────────────────────────── */
+#mcp-list { padding: 0 0 8px; }
+.mcp-empty { padding: 4px 16px; font-size: 11px; color: var(--text-dim); }
+.mcp-item {
+  padding: 5px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.mcp-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--gray);
+}
+.mcp-dot.connected  { background: var(--teal); }
+.mcp-dot.error      { background: var(--coral); }
+.mcp-dot.connecting { background: var(--amber); }
+.mcp-name { font-size: 12px; color: var(--text); font-family: var(--font-mono); }
+.mcp-status { font-size: 10px; color: var(--text-dim); }
+.mcp-tools { font-size: 10px; color: var(--text-dim); padding-left: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── AI context panel ────────────────────────────────────────────────────── */
 .panel-header {
   display: flex;

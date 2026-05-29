@@ -125,6 +125,10 @@ function handleEvent(ev) {
         new CustomEvent('_agent-ws-event', { detail: ev })
       )
       break
+
+    case 'mcp_status':
+      window.dispatchEvent(new CustomEvent('_mcp-status', { detail: ev.servers }))
+      break
   }
 }
 

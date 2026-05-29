@@ -31,7 +31,75 @@ from shell_core import ShellCore
 from ai_brain import AIBrain
 from renderer import Renderer
 from ws_server import WSBroadcaster
+from mcp_manager import MCPManager
 import command_store
+
+
+def _handle_mcp(user_input: str, mcp: "MCPManager", renderer: "Renderer"):
+    parts = user_input.split()
+    sub = parts[1].lower() if len(parts) > 1 else "list"
+
+    if sub == "list":
+        renderer.print_mcp_servers(mcp.list_servers())
+
+    elif sub == "add":
+        if len(parts) < 4:
+            renderer.print_error(
+                "Usage:\n"
+                "  mcp add stdio <name> <command> [args…]\n"
+                "  mcp add sse   <name> <url>"
+            )
+            return
+        transport = parts[2].lower()
+        name      = parts[3]
+        if transport == "stdio":
+            if len(parts) < 5:
+                renderer.print_error("Usage: mcp add stdio <name> <command> [args…]")
+                return
+            server = {"transport": "stdio", "command": parts[4], "args": parts[5:]}
+        elif transport == "sse":
+            if len(parts) < 5:
+                renderer.print_error("Usage: mcp add sse <name> <url>")
+                return
+            server = {"transport": "sse", "url": parts[4]}
+        else:
+            renderer.print_error(f"Unknown transport '{transport}'. Use 'stdio' or 'sse'.")
+            return
+        mcp.add_server(name, server)
+        renderer.print_info(f"Added MCP server '{name}'. Connecting…")
+        mcp.connect(name)
+
+    elif sub == "remove":
+        if len(parts) < 3:
+            renderer.print_error("Usage: mcp remove <name>")
+            return
+        name = parts[2]
+        if mcp.remove_server(name):
+            renderer.print_info(f"Removed MCP server '{name}'.")
+        else:
+            renderer.print_error(f"No MCP server named '{name}'.")
+
+    elif sub == "connect":
+        if len(parts) < 3:
+            renderer.print_error("Usage: mcp connect <name>")
+            return
+        name = parts[2]
+        if mcp.connect(name):
+            renderer.print_info(f"Connecting to '{name}'…")
+        else:
+            renderer.print_error(f"No MCP server named '{name}' configured.")
+
+    elif sub == "disconnect":
+        if len(parts) < 3:
+            renderer.print_error("Usage: mcp disconnect <name>")
+            return
+        mcp.disconnect(parts[2])
+        renderer.print_info(f"Disconnected '{parts[2]}'.")
+
+    else:
+        renderer.print_error(
+            "Unknown mcp sub-command. Available: list, add, remove, connect, disconnect"
+        )
 
 
 def _offer_save(commands: list[str], renderer):
@@ -66,11 +134,14 @@ def main():
     broadcaster = WSBroadcaster()
     broadcaster.start()
 
+    mcp = MCPManager(broadcaster=broadcaster)
+    mcp.start()
+
     renderer = Renderer()
     renderer.print_banner()
 
     core = ShellCore()
-    brain = AIBrain(api_key=api_key, shell_core=core, broadcaster=broadcaster)
+    brain = AIBrain(api_key=api_key, shell_core=core, broadcaster=broadcaster, mcp_manager=mcp)
 
     history_file = Path.home() / ".aishell_history"
     session = PromptSession(
@@ -113,6 +184,10 @@ def main():
 
         if user_input.lower() in ("sysinfo", "!sysinfo"):
             renderer.print_sysinfo(core.get_system_snapshot())
+            continue
+
+        if user_input.lower().startswith("mcp"):
+            _handle_mcp(user_input, mcp, renderer)
             continue
 
         if user_input.lower() in ("commands", "!commands"):
