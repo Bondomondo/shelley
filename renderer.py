@@ -153,6 +153,23 @@ class Renderer:
             print(f"  {GRAY}{label:<12}{R} {WHITE}{value}{R}")
         print()
 
+    # ── Saved commands ────────────────────────────────────────────────────────
+
+    def print_saved_commands(self, commands: list):
+        if not commands:
+            print(f"\n  {GRAY}No saved commands yet.{R}")
+            print(f"  {DIM_GRAY}Use  # <prompt>  to ask the AI, then save the result with a name.{R}\n")
+            return
+        print(f"\n  {TEAL}{BOLD}Saved commands{R}\n")
+        for c in commands:
+            name = c.get("name", "?")
+            cmds = c.get("commands", [])
+            created = c.get("created", "")[:10]
+            print(f"  {TEAL}:{name:<20}{R} {DIM_GRAY}{created}{R}")
+            for cmd in cmds:
+                print(f"    {GRAY}$ {cmd}{R}")
+        print()
+
     # ── Direct output ─────────────────────────────────────────────────────────
 
     def print_direct_output(self, result: dict):

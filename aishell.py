@@ -31,6 +31,29 @@ from shell_core import ShellCore
 from ai_brain import AIBrain
 from renderer import Renderer
 from ws_server import WSBroadcaster
+import command_store
+
+
+def _offer_save(commands: list[str], renderer):
+    """After an AI response that ran commands, offer to save them as a named command."""
+    TEAL  = "\033[38;2;93;202;165m"
+    GRAY  = "\033[38;2;136;135;128m"
+    AMBER = "\033[38;2;250;199;117m"
+    R     = "\033[0m"
+    try:
+        name = input(
+            f"\n  {TEAL}◆{R} {GRAY}Save as command?{R} "
+            f"{AMBER}Enter a name{R} {GRAY}(or press Enter to skip):{R} "
+        ).strip()
+    except EOFError:
+        return
+    if not name:
+        return
+    if not name.isidentifier():
+        print(f"  {AMBER}Name must be a single word (letters, digits, underscores).{R}\n")
+        return
+    command_store.save_command(name, commands)
+    renderer.print_info(f"Saved as ':{name}'. Run it anytime with  :{name}")
 
 
 def main():
@@ -92,11 +115,40 @@ def main():
             renderer.print_sysinfo(core.get_system_snapshot())
             continue
 
+        if user_input.lower() in ("commands", "!commands"):
+            renderer.print_saved_commands(command_store.list_commands())
+            continue
+
+        if user_input.lower().startswith("forget "):
+            name = user_input.split(None, 1)[1].strip()
+            if command_store.delete_command(name):
+                renderer.print_info(f"Deleted command '{name}'.")
+            else:
+                renderer.print_error(f"No saved command named '{name}'.")
+            continue
+
+        # Run a saved command by name  (:name)
+        if user_input.startswith(":"):
+            name = user_input[1:].strip()
+            saved = command_store.get_command(name)
+            if not saved:
+                renderer.print_error(f"No saved command named '{name}'. Type 'commands' to list them.")
+                continue
+            renderer.print_info(f"Running '{name}'…")
+            for cmd in saved["commands"]:
+                result = core.run_command(cmd)
+                renderer.print_direct_output(result)
+                if result["exit_code"] != 0 and result.get("stderr", "").strip():
+                    brain.suggest_fix(cmd, result, renderer)
+            continue
+
         # AI prompt — user prefixed with "#"
         if user_input.startswith("#"):
             ai_input = user_input[1:].strip()
             if ai_input:
-                brain.handle(ai_input, renderer)
+                executed = brain.handle(ai_input, renderer)
+                if executed:
+                    _offer_save(executed, renderer)
             continue
 
         # Direct command execution

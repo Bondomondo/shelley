@@ -112,14 +112,17 @@ class AIBrain:
                 preview = str(content)[:120]
             print(f"  [{i:02d}] {role}: {preview}")
 
-    def handle(self, user_input: str, renderer):
-        """Main entry: send user input to Claude, handle tool calls, stream response."""
+    def handle(self, user_input: str, renderer) -> list[str]:
+        """Main entry: send user input to Claude, handle tool calls, stream response.
+        Returns the list of shell commands that were actually executed."""
         self.conversation.append({"role": "user", "content": user_input})
         self._trim_history()
 
         system = SYSTEM_PROMPT.format(system_context=self.core.get_context_string())
 
         self._emit({"type": "ai_thinking", "input": user_input})
+
+        executed_commands: list[str] = []
 
         # Agentic loop: keep going until no more tool calls
         max_rounds = 8
@@ -136,7 +139,7 @@ class AIBrain:
                 renderer.print_error(f"API error: {e}")
                 self._emit({"type": "ai_response", "text": f"API error: {e}"})
                 self.conversation.pop()  # remove the failed user message
-                return
+                return []
 
             # Collect text and tool_use blocks
             text_blocks = []
@@ -159,7 +162,7 @@ class AIBrain:
                 self.conversation.append(
                     {"role": "assistant", "content": response.content}
                 )
-                break
+                return executed_commands
 
             # Execute tool calls
             tool_results = []
@@ -194,6 +197,7 @@ class AIBrain:
                 renderer.print_command(cmd, explanation)
                 result = self.core.run_command(cmd)
                 renderer.print_command_result(result)
+                executed_commands.append(cmd)
                 self._emit({
                     "type": "tool_result",
                     "command": cmd,
@@ -224,6 +228,7 @@ class AIBrain:
                 break
         else:
             renderer.print_error("Reached max tool call rounds.")
+        return executed_commands
 
     def suggest_fix(self, command: str, result: dict, renderer):
         """Called after a direct command fails — gives a brief fix suggestion."""
