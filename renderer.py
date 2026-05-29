@@ -153,6 +153,17 @@ class Renderer:
             print(f"  {GRAY}{label:<12}{R} {WHITE}{value}{R}")
         print()
 
+    # ── Direct output ─────────────────────────────────────────────────────────
+
+    def print_direct_output(self, result: dict):
+        """Print raw command output exactly as a normal terminal would."""
+        stdout = result.get("stdout", "").rstrip("\n")
+        stderr = result.get("stderr", "").rstrip("\n")
+        if stdout:
+            print(stdout)
+        if stderr:
+            print(f"{RED}{stderr}{R}")
+
     # ── Utility ───────────────────────────────────────────────────────────────
 
     def print_error(self, msg: str):
