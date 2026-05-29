@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --no-sandbox --dev",
-    "rebuild": "electron-rebuild -f -w node-pty"
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "postinstall": "node scripts/copy-xterm.js"
   },
   "dependencies": {
     "electron": "^30.0.0",
