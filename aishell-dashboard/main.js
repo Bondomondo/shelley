@@ -45,7 +45,10 @@ function spawnPty() {
   }
 
   const shellPath = path.join(__dirname, '..', 'aishell.py')
-  ptyProcess = pty.spawn('python3', [shellPath], {
+  const projectRoot = path.join(__dirname, '..')
+  const venvPython = path.join(projectRoot, '.venv', 'bin', 'python3')
+  const pythonBin = fs.existsSync(venvPython) ? venvPython : 'python3'
+  ptyProcess = pty.spawn(pythonBin, [shellPath], {
     name: 'xterm-color',
     cols: 120,
     rows: 40,

@@ -30,6 +30,7 @@ except ImportError as e:
 from shell_core import ShellCore
 from ai_brain import AIBrain
 from renderer import Renderer
+from ws_server import WSBroadcaster
 
 
 def main():
@@ -39,11 +40,14 @@ def main():
         print("Export it: export ANTHROPIC_API_KEY=sk-...\n")
         sys.exit(1)
 
+    broadcaster = WSBroadcaster()
+    broadcaster.start()
+
     renderer = Renderer()
     renderer.print_banner()
 
     core = ShellCore()
-    brain = AIBrain(api_key=api_key, shell_core=core)
+    brain = AIBrain(api_key=api_key, shell_core=core, broadcaster=broadcaster)
 
     history_file = Path.home() / ".aishell_history"
     session = PromptSession(

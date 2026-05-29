@@ -68,11 +68,16 @@ TOOLS = [
 
 
 class AIBrain:
-    def __init__(self, api_key: str, shell_core):
+    def __init__(self, api_key: str, shell_core, broadcaster=None):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.core = shell_core
+        self.broadcaster = broadcaster
         self.conversation: list[dict] = []
         self.max_history = 20  # keep last N message pairs
+
+    def _emit(self, event: dict):
+        if self.broadcaster:
+            self.broadcaster.emit(event)
 
     def reset(self):
         self.conversation = []
@@ -99,6 +104,8 @@ class AIBrain:
 
         system = SYSTEM_PROMPT.format(system_context=self.core.get_context_string())
 
+        self._emit({"type": "ai_thinking", "input": user_input})
+
         # Agentic loop: keep going until no more tool calls
         max_rounds = 8
         for round_num in range(max_rounds):
@@ -112,6 +119,7 @@ class AIBrain:
                 )
             except anthropic.APIError as e:
                 renderer.print_error(f"API error: {e}")
+                self._emit({"type": "ai_response", "text": f"API error: {e}"})
                 self.conversation.pop()  # remove the failed user message
                 return
 
@@ -126,7 +134,9 @@ class AIBrain:
 
             # Print any prose first
             if text_blocks:
-                renderer.print_ai_response(" ".join(text_blocks))
+                combined = " ".join(text_blocks)
+                renderer.print_ai_response(combined)
+                self._emit({"type": "ai_response", "text": combined})
 
             # If no tool calls, we're done
             if not tool_calls or response.stop_reason == "end_turn":
@@ -142,9 +152,16 @@ class AIBrain:
                 cmd = tc.input.get("command", "")
                 explanation = tc.input.get("explanation", "")
 
+                self._emit({"type": "tool_start", "command": cmd, "explanation": explanation})
                 renderer.print_command(cmd, explanation)
                 result = self.core.run_command(cmd)
                 renderer.print_command_result(result)
+                self._emit({
+                    "type": "tool_result",
+                    "command": cmd,
+                    "exit_code": result["exit_code"],
+                    "stdout": result["stdout"][:4000],
+                })
 
                 tool_results.append({
                     "type": "tool_result",
