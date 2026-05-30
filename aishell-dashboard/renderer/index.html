@@ -43,6 +43,16 @@
       <div class="section-label">Agents</div>
       <div id="agent-list"></div>
     </section>
+
+    <section class="sidebar-section">
+      <div class="section-label">MCP Servers</div>
+      <div id="mcp-list"><div class="mcp-empty">No servers configured</div></div>
+    </section>
+
+    <section class="sidebar-section">
+      <div class="section-label">Commands</div>
+      <div id="commands-list"><div class="mcp-empty">No saved commands</div></div>
+    </section>
   </aside>
 
   <!-- CENTER PANEL -->
@@ -54,6 +64,22 @@
         <button id="agent-back-btn">← Back to terminal</button>
       </div>
       <pre id="agent-output-pre"></pre>
+    </div>
+
+    <div id="mcp-detail-container" style="display:none">
+      <div class="detail-header">
+        <span class="detail-title" id="mcp-detail-title"></span>
+        <button class="detail-back-btn" id="mcp-detail-back">← Back to terminal</button>
+      </div>
+      <div id="mcp-detail-content" class="detail-content"></div>
+    </div>
+
+    <div id="commands-detail-container" style="display:none">
+      <div class="detail-header">
+        <span class="detail-title" id="commands-detail-title"></span>
+        <button class="detail-back-btn" id="commands-detail-back">← Back to terminal</button>
+      </div>
+      <div id="commands-detail-content" class="detail-content"></div>
     </div>
 
     <div id="prompt-bar">
@@ -85,6 +111,8 @@
   <script src="terminal.js"></script>
   <script src="sysmon.js"></script>
   <script src="agent-panel.js"></script>
+  <script src="mcp-panel.js"></script>
+  <script src="commands-panel.js"></script>
   <script src="ai-context.js"></script>
 </body>
 </html>

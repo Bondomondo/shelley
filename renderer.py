@@ -153,6 +153,49 @@ class Renderer:
             print(f"  {GRAY}{label:<12}{R} {WHITE}{value}{R}")
         print()
 
+    # ── MCP servers ───────────────────────────────────────────────────────────
+
+    def print_mcp_servers(self, servers: list):
+        if not servers:
+            print(f"\n  {GRAY}No MCP servers configured.{R}")
+            print(f"  {DIM_GRAY}Add one: mcp add stdio <name> <command> [args]{R}\n")
+            return
+        print(f"\n  {TEAL}{BOLD}MCP Servers{R}\n")
+        for s in servers:
+            status = s.get("status", "disconnected")
+            if status == "connected":
+                dot = f"{GREEN}●{R}"
+            elif status.startswith("error"):
+                dot = f"{RED}●{R}"
+            elif status == "connecting…":
+                dot = f"{AMBER}●{R}"
+            else:
+                dot = f"{GRAY}●{R}"
+            name = s.get("name", "?")
+            transport = s.get("transport", "stdio")
+            tools = s.get("tools", [])
+            print(f"  {dot} {WHITE}{name:<20}{R} {DIM_GRAY}{transport}  {status}{R}")
+            if tools:
+                print(f"    {DIM_GRAY}tools: {', '.join(tools[:8])}{'…' if len(tools) > 8 else ''}{R}")
+        print()
+
+    # ── Saved commands ────────────────────────────────────────────────────────
+
+    def print_saved_commands(self, commands: list):
+        if not commands:
+            print(f"\n  {GRAY}No saved commands yet.{R}")
+            print(f"  {DIM_GRAY}Use  # <prompt>  to ask the AI, then save the result with a name.{R}\n")
+            return
+        print(f"\n  {TEAL}{BOLD}Saved commands{R}\n")
+        for c in commands:
+            name = c.get("name", "?")
+            cmds = c.get("commands", [])
+            created = c.get("created", "")[:10]
+            print(f"  {TEAL}:{name:<20}{R} {DIM_GRAY}{created}{R}")
+            for cmd in cmds:
+                print(f"    {GRAY}$ {cmd}{R}")
+        print()
+
     # ── Direct output ─────────────────────────────────────────────────────────
 
     def print_direct_output(self, result: dict):

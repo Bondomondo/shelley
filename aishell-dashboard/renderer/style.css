@@ -85,6 +85,108 @@ body { display: flex; flex-direction: row; }
   overflow: hidden;
 }
 
+/* ── Shared detail panel (MCP detail, Commands detail) ───────────────────── */
+#mcp-detail-container,
+#commands-detail-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0e0e0c;
+}
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.detail-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--teal);
+  font-weight: 600;
+}
+.detail-back-btn {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.detail-back-btn:hover { color: var(--text); }
+.detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* MCP detail tool list */
+.mcp-tool-row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-dim);
+  align-items: baseline;
+}
+.mcp-tool-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--teal);
+  min-width: 180px;
+  flex-shrink: 0;
+}
+.mcp-tool-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.mcp-detail-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Commands detail */
+.cmd-block {
+  margin-bottom: 20px;
+}
+.cmd-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.cmd-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--amber);
+  padding: 4px 0;
+  display: flex;
+  gap: 8px;
+}
+.cmd-line::before { content: '$'; color: var(--text-dim); }
+
+/* Commands sidebar list */
+#commands-list { padding: 0 0 8px; }
+.cmd-item {
+  padding: 4px 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.cmd-item:hover { background: var(--bg-hover); }
+.cmd-item-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--teal);
+}
+.cmd-item-date { font-size: 10px; color: var(--text-dim); }
+
 /* ── Terminal container ──────────────────────────────────────────────────── */
 #terminal-container {
   flex: 1;
@@ -329,6 +431,33 @@ body { display: flex; flex-direction: row; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── MCP server list ─────────────────────────────────────────────────────── */
+#mcp-list { padding: 0 0 8px; }
+.mcp-empty { padding: 4px 16px; font-size: 11px; color: var(--text-dim); }
+.mcp-item {
+  padding: 5px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.mcp-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--gray);
+}
+.mcp-dot.connected  { background: var(--teal); }
+.mcp-dot.error      { background: var(--coral); }
+.mcp-dot.connecting { background: var(--amber); }
+.mcp-name { font-size: 12px; color: var(--text); font-family: var(--font-mono); }
+.mcp-status { font-size: 10px; color: var(--text-dim); }
+.mcp-tools { font-size: 10px; color: var(--text-dim); padding-left: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── AI context panel ────────────────────────────────────────────────────── */
 .panel-header {

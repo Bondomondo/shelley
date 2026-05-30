@@ -83,10 +83,11 @@ TOOLS = [
 
 
 class AIBrain:
-    def __init__(self, api_key: str, shell_core, broadcaster=None):
+    def __init__(self, api_key: str, shell_core, broadcaster=None, mcp_manager=None):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.core = shell_core
         self.broadcaster = broadcaster
+        self.mcp = mcp_manager
         self.conversation: list[dict] = []
         self.max_history = 20  # keep last N message pairs
 
@@ -112,8 +113,9 @@ class AIBrain:
                 preview = str(content)[:120]
             print(f"  [{i:02d}] {role}: {preview}")
 
-    def handle(self, user_input: str, renderer):
-        """Main entry: send user input to Claude, handle tool calls, stream response."""
+    def handle(self, user_input: str, renderer) -> list[str]:
+        """Main entry: send user input to Claude, handle tool calls, stream response.
+        Returns the list of shell commands that were actually executed."""
         self.conversation.append({"role": "user", "content": user_input})
         self._trim_history()
 
@@ -121,22 +123,25 @@ class AIBrain:
 
         self._emit({"type": "ai_thinking", "input": user_input})
 
+        executed_commands: list[str] = []
+
         # Agentic loop: keep going until no more tool calls
         max_rounds = 8
         for round_num in range(max_rounds):
+            all_tools = TOOLS + (self.mcp.get_all_tools() if self.mcp else [])
             try:
                 response = self.client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=2048,
                     system=system,
-                    tools=TOOLS,
+                    tools=all_tools,
                     messages=self.conversation,
                 )
             except anthropic.APIError as e:
                 renderer.print_error(f"API error: {e}")
                 self._emit({"type": "ai_response", "text": f"API error: {e}"})
                 self.conversation.pop()  # remove the failed user message
-                return
+                return []
 
             # Collect text and tool_use blocks
             text_blocks = []
@@ -159,7 +164,7 @@ class AIBrain:
                 self.conversation.append(
                     {"role": "assistant", "content": response.content}
                 )
-                break
+                return executed_commands
 
             # Execute tool calls
             tool_results = []
@@ -190,10 +195,27 @@ class AIBrain:
                         })
                         continue
 
+                # ── MCP tool call ──────────────────────────────────────
+                from mcp_manager import decode_tool
+                if tc.name.startswith("mcp__") and self.mcp and decode_tool(tc.name):
+                    self._emit({"type": "tool_start", "command": tc.name, "explanation": explanation})
+                    renderer.print_command(tc.name, explanation)
+                    mcp_result = self.mcp.call_tool(tc.name, tc.input)
+                    renderer.print_direct_output({"stdout": mcp_result, "stderr": "", "exit_code": 0})
+                    self._emit({"type": "tool_result", "command": tc.name, "exit_code": 0, "stdout": mcp_result[:4000]})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tc.id,
+                        "content": mcp_result[:4000],
+                    })
+                    continue
+
+                # ── Shell tool call ────────────────────────────────────
                 self._emit({"type": "tool_start", "command": cmd, "explanation": explanation})
                 renderer.print_command(cmd, explanation)
                 result = self.core.run_command(cmd)
                 renderer.print_command_result(result)
+                executed_commands.append(cmd)
                 self._emit({
                     "type": "tool_result",
                     "command": cmd,
@@ -224,6 +246,7 @@ class AIBrain:
                 break
         else:
             renderer.print_error("Reached max tool call rounds.")
+        return executed_commands
 
     def suggest_fix(self, command: str, result: dict, renderer):
         """Called after a direct command fails — gives a brief fix suggestion."""
