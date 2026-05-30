@@ -102,7 +102,11 @@ def _handle_mcp(user_input: str, mcp: "MCPManager", renderer: "Renderer"):
         )
 
 
-def _offer_save(commands: list[str], renderer):
+def _broadcast_commands(broadcaster):
+    broadcaster.emit({"type": "commands_list", "commands": command_store.list_commands()})
+
+
+def _offer_save(commands: list[str], renderer, broadcaster=None):
     """After an AI response that ran commands, offer to save them as a named command."""
     TEAL  = "\033[38;2;93;202;165m"
     GRAY  = "\033[38;2;136;135;128m"
@@ -122,6 +126,8 @@ def _offer_save(commands: list[str], renderer):
         return
     command_store.save_command(name, commands)
     renderer.print_info(f"Saved as ':{name}'. Run it anytime with  :{name}")
+    if broadcaster:
+        _broadcast_commands(broadcaster)
 
 
 def main():
@@ -136,6 +142,12 @@ def main():
 
     mcp = MCPManager(broadcaster=broadcaster)
     mcp.start()
+
+    def _on_client_connect(emit):
+        emit({"type": "commands_list", "commands": command_store.list_commands()})
+        emit({"type": "mcp_status",    "servers":  mcp.list_servers()})
+
+    broadcaster.set_on_connect(_on_client_connect)
 
     renderer = Renderer()
     renderer.print_banner()
@@ -198,6 +210,7 @@ def main():
             name = user_input.split(None, 1)[1].strip()
             if command_store.delete_command(name):
                 renderer.print_info(f"Deleted command '{name}'.")
+                _broadcast_commands(broadcaster)
             else:
                 renderer.print_error(f"No saved command named '{name}'.")
             continue
@@ -223,7 +236,7 @@ def main():
             if ai_input:
                 executed = brain.handle(ai_input, renderer)
                 if executed:
-                    _offer_save(executed, renderer)
+                    _offer_save(executed, renderer, broadcaster)
             continue
 
         # Direct command execution

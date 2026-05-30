@@ -129,6 +129,10 @@ function handleEvent(ev) {
     case 'mcp_status':
       window.dispatchEvent(new CustomEvent('_mcp-status', { detail: ev.servers }))
       break
+
+    case 'commands_list':
+      window.dispatchEvent(new CustomEvent('_commands-list', { detail: ev.commands }))
+      break
   }
 }
 

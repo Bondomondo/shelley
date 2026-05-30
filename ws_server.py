@@ -25,8 +25,13 @@ class WSBroadcaster:
         self._clients: set = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ready = threading.Event()
+        self._on_connect = None   # callable(emit_fn) called for each new client
 
     # ── Public API (call from any thread) ────────────────────────────────────
+
+    def set_on_connect(self, callback):
+        """Register a callback invoked with a single-client emit fn on each new connection."""
+        self._on_connect = callback
 
     def emit(self, event: dict):
         """Broadcast a JSON event to all connected clients (thread-safe)."""
@@ -62,9 +67,21 @@ class WSBroadcaster:
 
     async def _handler(self, ws):
         self._clients.add(ws)
+        if self._on_connect:
+            def _emit_one(event: dict):
+                asyncio.run_coroutine_threadsafe(
+                    self._send_one(ws, json.dumps(event)), self._loop
+                )
+            self._on_connect(_emit_one)
         try:
             await ws.wait_closed()
         finally:
+            self._clients.discard(ws)
+
+    async def _send_one(self, ws, payload: str):
+        try:
+            await ws.send(payload)
+        except Exception:
             self._clients.discard(ws)
 
     async def _broadcast(self, payload: str):
