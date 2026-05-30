@@ -58,10 +58,46 @@ class ShellCore:
 
     # ── Execution ────────────────────────────────────────────────────────────
 
+    # Programs that need a real TTY — run without output capture
+    _TUI_COMMANDS = {
+        'htop', 'top', 'btop', 'bpytop', 'glances',
+        'vim', 'vi', 'nvim', 'nano', 'emacs', 'micro', 'helix', 'hx',
+        'less', 'more', 'most', 'bat',
+        'man', 'info',
+        'mc', 'ranger', 'nnn', 'lf', 'vifm', 'yazi',
+        'ncdu', 'duf',
+        'tig', 'lazygit', 'gitui',
+        'tmux', 'screen', 'zellij',
+        'watch',
+        'fzf', 'sk',
+        'cmus', 'ncmpcpp', 'moc',
+        'mutt', 'neomutt', 'alpine',
+        'weechat', 'irssi',
+        'lynx', 'w3m', 'links', 'links2',
+        'nethack', 'cataclysm-tiles',
+        'journalctl',
+    }
+
+    def _is_tui(self, command: str) -> bool:
+        """Return True if the command should run with full TTY access."""
+        # Strip leading env assignments and sudo/nice/etc.
+        tokens = command.strip().split()
+        for tok in tokens:
+            if '=' in tok:
+                continue   # skip VAR=val env assignments
+            # Strip path prefix
+            base = os.path.basename(tok)
+            if base in ('sudo', 'doas', 'nice', 'ionice', 'strace', 'time'):
+                continue
+            return base in self._TUI_COMMANDS
+        return False
+
     def run_command(self, command: str) -> dict:
         command = command.strip()
         if command.startswith("cd"):
             return self._handle_cd(command)
+        if self._is_tui(command):
+            return self._run_tui(command)
         try:
             result = subprocess.run(
                 command,
@@ -82,6 +118,22 @@ class ShellCore:
         except subprocess.TimeoutExpired:
             self.last_exit_code = 1
             return {"stdout": "", "stderr": f"Timed out: {command}", "exit_code": 1, "command": command}
+        except Exception as e:
+            self.last_exit_code = 1
+            return {"stdout": "", "stderr": str(e), "exit_code": 1, "command": command}
+
+    def _run_tui(self, command: str) -> dict:
+        """Run a TUI program with full TTY access (no output capture)."""
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=str(self.cwd),
+                env=self.env,
+                # stdin/stdout/stderr inherited from parent → PTY
+            )
+            self.last_exit_code = result.returncode
+            return {"stdout": "", "stderr": "", "exit_code": result.returncode, "command": command}
         except Exception as e:
             self.last_exit_code = 1
             return {"stdout": "", "stderr": str(e), "exit_code": 1, "command": command}
