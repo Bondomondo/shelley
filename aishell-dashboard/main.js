@@ -6,10 +6,85 @@ const fs = require('fs')
 const { exec } = require('child_process')
 
 let win = null
-let ptyProcess = null
 let prevCpu = null
 let prevNet = null
 let statsInterval = null
+
+// ─── Tab / PTY management ─────────────────────────────────────────────────────
+
+const tabs = new Map()   // tabId -> { ptyProcess, resizeTimer }
+let tabIdCounter = 0
+
+const projectRoot = path.join(__dirname, '..')
+const venvPython  = path.join(projectRoot, '.venv', 'bin', 'python3')
+const pythonBin   = fs.existsSync(venvPython) ? venvPython : 'python3'
+const shellPath   = path.join(projectRoot, 'aishell.py')
+
+function createTab() {
+  let pty
+  try { pty = require('node-pty') } catch (e) {
+    console.error('node-pty not available:', e.message)
+    return null
+  }
+
+  const tabId   = ++tabIdCounter
+  const wsPort  = tabId === 1 ? '7700' : '0'   // only first tab runs WS server
+  const title   = `Shell ${tabId}`
+
+  const ptyProcess = pty.spawn(pythonBin, [shellPath], {
+    name: 'xterm-color',
+    cols: 120,
+    rows: 40,
+    cwd:  projectRoot,
+    env:  Object.assign({}, process.env, {
+      TERM: 'xterm-color',
+      AISHELL_WS_PORT: wsPort,
+    }),
+  })
+
+  ptyProcess.onData(data => {
+    if (win && !win.isDestroyed()) win.webContents.send('pty-data', { tabId, data })
+  })
+
+  ptyProcess.onExit(({ exitCode, signal }) => {
+    if (win && !win.isDestroyed()) win.webContents.send('pty-exit', { tabId, exitCode, signal })
+    tabs.delete(tabId)
+  })
+
+  tabs.set(tabId, { ptyProcess, resizeTimer: null })
+
+  if (win && !win.isDestroyed()) win.webContents.send('tab-created', { tabId, title })
+
+  return tabId
+}
+
+function closeTab(tabId) {
+  const tab = tabs.get(tabId)
+  if (!tab) return
+  clearTimeout(tab.resizeTimer)
+  try { tab.ptyProcess.kill('SIGTERM') } catch (_) {}
+  tabs.delete(tabId)
+  if (win && !win.isDestroyed()) win.webContents.send('tab-closed', tabId)
+}
+
+// ─── IPC ─────────────────────────────────────────────────────────────────────
+
+ipcMain.on('pty-write', (_, { tabId, data }) => {
+  const tab = tabs.get(tabId)
+  if (tab) tab.ptyProcess.write(data)
+})
+
+ipcMain.on('pty-resize', (_, { tabId, cols, rows }) => {
+  const tab = tabs.get(tabId)
+  if (!tab) return
+  clearTimeout(tab.resizeTimer)
+  tab.resizeTimer = setTimeout(() => {
+    try { tab.ptyProcess.resize(cols, rows) } catch (_) {}
+  }, 100)
+})
+
+ipcMain.on('tab-new',   ()        => createTab())
+ipcMain.on('tab-close', (_, tabId) => closeTab(tabId))
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
@@ -33,64 +108,12 @@ function createWindow() {
   }
 }
 
-// ─── PTY ──────────────────────────────────────────────────────────────────────
-
-function spawnPty() {
-  let pty
-  try {
-    pty = require('node-pty')
-  } catch (e) {
-    console.error('node-pty not available:', e.message)
-    return
-  }
-
-  const shellPath = path.join(__dirname, '..', 'aishell.py')
-  const projectRoot = path.join(__dirname, '..')
-  const venvPython = path.join(projectRoot, '.venv', 'bin', 'python3')
-  const pythonBin = fs.existsSync(venvPython) ? venvPython : 'python3'
-  ptyProcess = pty.spawn(pythonBin, [shellPath], {
-    name: 'xterm-color',
-    cols: 120,
-    rows: 40,
-    cwd: path.join(__dirname, '..'),
-    env: Object.assign({}, process.env, { TERM: 'xterm-color' }),
-  })
-
-  ptyProcess.onData(data => {
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('pty-data', data)
-    }
-  })
-
-  ptyProcess.onExit(({ exitCode, signal }) => {
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('pty-exit', { exitCode, signal })
-    }
-  })
-}
-
-ipcMain.on('pty-write', (_, data) => {
-  if (ptyProcess) ptyProcess.write(data)
-})
-
-// Debounced resize — only apply after 100 ms of quiet
-let resizeTimer = null
-ipcMain.on('pty-resize', (_, { cols, rows }) => {
-  clearTimeout(resizeTimer)
-  resizeTimer = setTimeout(() => {
-    if (ptyProcess) {
-      try { ptyProcess.resize(cols, rows) } catch (_) {}
-    }
-  }, 100)
-})
-
 // ─── System stats ─────────────────────────────────────────────────────────────
 
 function parseCpuLine(line) {
-  // cpu  user nice system idle iowait irq softirq steal guest guest_nice
   const parts = line.trim().split(/\s+/)
   const nums = parts.slice(1).map(Number)
-  const idle = nums[3] + (nums[4] || 0) // idle + iowait
+  const idle = nums[3] + (nums[4] || 0)
   const total = nums.reduce((a, b) => a + b, 0)
   return { idle, total }
 }
@@ -100,8 +123,7 @@ async function readCpu() {
     fs.readFile('/proc/stat', 'utf8', (err, data) => {
       if (err) return resolve(null)
       const line = data.split('\n').find(l => l.startsWith('cpu '))
-      if (!line) return resolve(null)
-      resolve(parseCpuLine(line))
+      resolve(line ? parseCpuLine(line) : null)
     })
   })
 }
@@ -110,18 +132,9 @@ async function readMemory() {
   return new Promise(resolve => {
     fs.readFile('/proc/meminfo', 'utf8', (err, data) => {
       if (err) return resolve({ used_gb: 0, total_gb: 0, percent: 0 })
-      const get = key => {
-        const m = data.match(new RegExp(key + ':\\s+(\\d+)'))
-        return m ? parseInt(m[1]) : 0
-      }
-      const total = get('MemTotal')
-      const avail = get('MemAvailable')
-      const used = total - avail
-      resolve({
-        used_gb:  +(used  / 1024 / 1024).toFixed(1),
-        total_gb: +(total / 1024 / 1024).toFixed(1),
-        percent:  total ? Math.round(used / total * 100) : 0,
-      })
+      const get = key => { const m = data.match(new RegExp(key + ':\\s+(\\d+)')); return m ? parseInt(m[1]) : 0 }
+      const total = get('MemTotal'), avail = get('MemAvailable'), used = total - avail
+      resolve({ used_gb: +(used/1024/1024).toFixed(1), total_gb: +(total/1024/1024).toFixed(1), percent: total ? Math.round(used/total*100) : 0 })
     })
   })
 }
@@ -130,22 +143,9 @@ async function readDisk() {
   return new Promise(resolve => {
     exec('df -h /', (err, stdout) => {
       if (err) return resolve({ free_gb: 0, total_gb: 0, percent: 0 })
-      const lines = stdout.trim().split('\n')
-      if (lines.length < 2) return resolve({ free_gb: 0, total_gb: 0, percent: 0 })
-      const cols = lines[1].trim().split(/\s+/)
-      // filesystem size used avail use% mountpoint
-      const parseSize = s => {
-        const n = parseFloat(s)
-        if (s.endsWith('G')) return n
-        if (s.endsWith('T')) return n * 1024
-        if (s.endsWith('M')) return +(n / 1024).toFixed(2)
-        return n
-      }
-      resolve({
-        total_gb: parseSize(cols[1] || '0'),
-        free_gb:  parseSize(cols[3] || '0'),
-        percent:  parseInt((cols[4] || '0%').replace('%', '')) || 0,
-      })
+      const cols = stdout.trim().split('\n')[1]?.trim().split(/\s+/) || []
+      const p = s => { const n = parseFloat(s); return s.endsWith('G') ? n : s.endsWith('T') ? n*1024 : s.endsWith('M') ? +(n/1024).toFixed(2) : n }
+      resolve({ total_gb: p(cols[1]||'0'), free_gb: p(cols[3]||'0'), percent: parseInt((cols[4]||'0%').replace('%',''))||0 })
     })
   })
 }
@@ -153,20 +153,14 @@ async function readDisk() {
 async function readNetwork() {
   return new Promise(resolve => {
     fs.readFile('/proc/net/dev', 'utf8', (err, data) => {
-      if (err) return resolve({ rx_kbps: 0, tx_kbps: 0 })
-      const lines = data.trim().split('\n').slice(2)
-      let rx = 0, tx = 0
-      for (const line of lines) {
+      if (err) return resolve({ rx: 0, tx: 0 })
+      for (const line of data.trim().split('\n').slice(2)) {
         const [iface, stats] = line.split(':')
-        if (!stats) continue
-        const name = iface.trim()
-        if (name === 'lo') continue
+        if (!stats || iface.trim() === 'lo') continue
         const nums = stats.trim().split(/\s+/).map(Number)
-        rx += nums[0]
-        tx += nums[8]
-        break // first non-lo interface
+        return resolve({ rx: nums[0], tx: nums[8] })
       }
-      resolve({ rx, tx })
+      resolve({ rx: 0, tx: 0 })
     })
   })
 }
@@ -174,71 +168,47 @@ async function readNetwork() {
 async function readUptime() {
   return new Promise(resolve => {
     fs.readFile('/proc/uptime', 'utf8', (err, data) => {
-      if (err) return resolve({ seconds: 0 })
-      resolve({ seconds: Math.floor(parseFloat(data.split(' ')[0])) })
+      resolve({ seconds: err ? 0 : Math.floor(parseFloat(data.split(' ')[0])) })
     })
   })
 }
 
 async function pollStats() {
-  const [cpu, memory, disk, net, uptime] = await Promise.all([
-    readCpu(), readMemory(), readDisk(), readNetwork(), readUptime(),
-  ])
-
+  const [cpu, memory, disk, net, uptime] = await Promise.all([readCpu(), readMemory(), readDisk(), readNetwork(), readUptime()])
   let cpuPercent = 0
-  if (cpu && prevCpu) {
-    const dTotal = cpu.total - prevCpu.total
-    const dIdle  = cpu.idle  - prevCpu.idle
-    cpuPercent = dTotal > 0 ? Math.round((1 - dIdle / dTotal) * 100) : 0
-  }
+  if (cpu && prevCpu) { const dT = cpu.total - prevCpu.total, dI = cpu.idle - prevCpu.idle; cpuPercent = dT > 0 ? Math.round((1 - dI/dT)*100) : 0 }
   if (cpu) prevCpu = cpu
-
   let rx_kbps = 0, tx_kbps = 0
-  if (prevNet) {
-    rx_kbps = +((net.rx - prevNet.rx) / 1024 / 2).toFixed(1)
-    tx_kbps = +((net.tx - prevNet.tx) / 1024 / 2).toFixed(1)
-    if (rx_kbps < 0) rx_kbps = 0
-    if (tx_kbps < 0) tx_kbps = 0
-  }
+  if (prevNet) { rx_kbps = Math.max(0, +((net.rx - prevNet.rx)/1024/2).toFixed(1)); tx_kbps = Math.max(0, +((net.tx - prevNet.tx)/1024/2).toFixed(1)) }
   prevNet = net
-
-  const stats = {
-    cpu:     { percent: cpuPercent },
-    memory,
-    disk,
-    network: { rx_kbps, tx_kbps },
-    uptime,
-  }
-
-  if (win && !win.isDestroyed()) {
-    win.webContents.send('sys-stats', stats)
-  }
+  if (win && !win.isDestroyed()) win.webContents.send('sys-stats', { cpu: { percent: cpuPercent }, memory, disk, network: { rx_kbps, tx_kbps }, uptime })
 }
 
 // ─── Global shortcuts ─────────────────────────────────────────────────────────
 
 function registerShortcuts() {
-  const r = globalShortcut.register
-  if (!r.call(globalShortcut, 'Ctrl+Alt+Q', () => app.quit())) {
-    console.warn('Ctrl+Alt+Q shortcut could not be registered')
-  }
-  if (!globalShortcut.register('Ctrl+Alt+T', () => {
-    if (win && !win.isDestroyed()) win.webContents.send('focus-terminal')
-  })) console.warn('Ctrl+Alt+T shortcut could not be registered')
+  const reg = (key, fn) => { if (!globalShortcut.register(key, fn)) console.warn(`${key} shortcut could not be registered`) }
 
-  if (!globalShortcut.register('Ctrl+Alt+A', () => {
-    if (win && !win.isDestroyed()) win.webContents.send('toggle-ai-panel')
-  })) console.warn('Ctrl+Alt+A shortcut could not be registered')
+  reg('Ctrl+Alt+Q', () => app.quit())
+
+  reg('Ctrl+Alt+T', () => { if (win && !win.isDestroyed()) win.webContents.send('focus-terminal') })
+
+  reg('Ctrl+Alt+A', () => { if (win && !win.isDestroyed()) win.webContents.send('toggle-ai-panel') })
+
+  reg('Ctrl+T', () => createTab())
+
+  reg('Ctrl+W', () => { if (win && !win.isDestroyed()) win.webContents.send('close-active-tab') })
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
   createWindow()
-  spawnPty()
-  registerShortcuts()
 
-  // Seed prevCpu and prevNet before first interval fires
+  // Wait for renderer to be ready before sending tab-created
+  win.webContents.once('did-finish-load', () => createTab())
+
+  registerShortcuts()
   prevCpu = await readCpu()
   prevNet = await readNetwork()
   statsInterval = setInterval(pollStats, 2000)
@@ -248,21 +218,16 @@ app.on('will-quit', e => {
   e.preventDefault()
   globalShortcut.unregisterAll()
   if (statsInterval) clearInterval(statsInterval)
-  if (ptyProcess) {
-    const proc = ptyProcess
-    ptyProcess = null // prevent re-entry on second will-quit
-    let cleaned = false
-    const finish = () => {
-      if (cleaned) return
-      cleaned = true
-      app.exit(0)
-    }
-    proc.onExit(finish)
-    try { proc.kill('SIGTERM') } catch (_) {}
-    setTimeout(finish, 2000) // force exit after 2 s
-  } else {
-    app.exit(0)
-  }
+
+  const procs = [...tabs.values()].map(t => t.ptyProcess).filter(Boolean)
+  tabs.clear()
+
+  if (procs.length === 0) { app.exit(0); return }
+
+  let done = 0
+  const finish = () => { if (++done >= procs.length) app.exit(0) }
+  procs.forEach(p => { p.onExit(finish); try { p.kill('SIGTERM') } catch (_) {} })
+  setTimeout(() => app.exit(0), 2000)
 })
 
 app.on('window-all-closed', () => app.quit())

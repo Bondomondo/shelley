@@ -16,7 +16,8 @@ try:
 except ImportError:
     _HAS_WS = False
 
-PORT = 7700
+import os
+PORT = int(os.environ.get('AISHELL_WS_PORT', '7700'))
 log = logging.getLogger(__name__)
 
 
@@ -42,6 +43,8 @@ class WSBroadcaster:
 
     def start(self):
         """Start the WebSocket server in a background daemon thread."""
+        if PORT == 0:
+            return  # disabled for secondary aishell tabs
         if not _HAS_WS:
             print(
                 "\n[ws_server] 'websockets' package not found — "

@@ -21,22 +21,29 @@ const promptInput = document.getElementById('prompt-input')
 
 promptInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
-    const val = promptInput.value
+    const val = promptInput.value.trim()
     promptInput.value = ''
-    window.shellBridge.write(val + '\n')
+    if (val && window._activeTabId != null) {
+      window.shellBridge.write(window._activeTabId, val + '\n')
+    }
   } else if (e.key === 'Escape') {
     promptInput.value = ''
     if (window.termInstance) window.termInstance.focus()
   }
-  // Up/Down: TODO — cycle prompt_toolkit history
 })
 
-// Back to terminal button
-document.getElementById('agent-back-btn').addEventListener('click', () => {
-  document.getElementById('terminal-container').style.display = ''
-  document.getElementById('agent-output-container').style.display = 'none'
+// ── Shared "back to terminal" helper used by all detail panels ────────────────
+
+window.showTerminal = function () {
+  document.getElementById('terminal-container').style.display        = ''
+  document.getElementById('agent-output-container').style.display    = 'none'
+  document.getElementById('mcp-detail-container').style.display      = 'none'
+  document.getElementById('commands-detail-container').style.display = 'none'
   if (window.termInstance) {
     window.termInstance.focus()
     if (window._termFitAddon) window._termFitAddon.fit()
   }
-})
+}
+
+// Back to terminal button (agent panel)
+document.getElementById('agent-back-btn').addEventListener('click', window.showTerminal)

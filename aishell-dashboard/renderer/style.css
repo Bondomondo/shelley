@@ -187,6 +187,55 @@ body { display: flex; flex-direction: row; }
 }
 .cmd-item-date { font-size: 10px; color: var(--text-dim); }
 
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+#tab-bar {
+  display: flex;
+  align-items: center;
+  background: #161614;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+#tab-bar::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 14px;
+  height: 100%;
+  gap: 8px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.tab.active {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--teal);
+}
+.tab-label { user-select: none; }
+.tab-close {
+  opacity: 0.4;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  color: inherit;
+}
+.tab-close:hover { opacity: 1; color: var(--coral); }
+#tab-new-btn {
+  padding: 0 12px;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+#tab-new-btn:hover { color: var(--teal); }
+
 /* ── Terminal container ──────────────────────────────────────────────────── */
 #terminal-container {
   flex: 1;
